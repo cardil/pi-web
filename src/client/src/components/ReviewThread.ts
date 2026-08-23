@@ -1,9 +1,11 @@
 import { LitElement, css, html, type PropertyValues, type TemplateResult } from "lit";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { formatAnchorLabel } from "../review/reviewCoordinates";
 import type { ReviewAnchor, ReviewComment } from "../review/reviewTypes";
 import { actionMenuPanelStyle } from "./actionMenu";
 import { createMobilePromptEnterMedia, readPromptEnterPreference, shouldSendPromptOnEnterShortcut } from "../promptEnterBehavior";
+import { toSafeMarkdownHtml } from "../formatting/markdown";
 
 /** An in-progress, not-yet-saved comment rendered alongside saved ones. */
 export interface ReviewThreadDraft {
@@ -89,7 +91,7 @@ export class ReviewThread extends LitElement {
             ` : null}
           </div>
         </div>
-        <p class="body">${comment.body}</p>
+        <div class="body">${unsafeHTML(toSafeMarkdownHtml(comment.body))}</div>
       </div>
     `;
   }
@@ -203,7 +205,22 @@ export class ReviewThread extends LitElement {
     .card.draft { background: var(--pi-selection-bg); }
     .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
     .caption { color: var(--pi-muted); font-size: 11px; overflow-wrap: anywhere; }
-    .body { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .body { margin: 0; overflow-wrap: anywhere; white-space: normal; line-height: 1.45; }
+    .body p, .body ul, .body ol, .body pre, .body blockquote { margin: 0 0 8px; }
+    .body :last-child { margin-bottom: 0; }
+    .body ul, .body ol { padding-left: 20px; }
+    .body li + li { margin-top: 2px; }
+    .body code { border: 1px solid var(--pi-border-muted); border-radius: 3px; background: var(--pi-bg); padding: 1px 3px; font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .body pre { border: 1px solid var(--pi-border-muted); border-radius: 6px; background: var(--pi-bg); padding: 8px; overflow-x: auto; }
+    .body pre code { border: 0; padding: 0; background: transparent; }
+    .body blockquote { border-left: 3px solid var(--pi-border-muted); padding-left: 8px; color: var(--pi-muted); }
+    .body a { color: var(--pi-accent); }
+    .body h1, .body h2, .body h3, .body h4 { margin: 10px 0 6px; line-height: 1.2; }
+    .body h1:first-child, .body h2:first-child, .body h3:first-child, .body h4:first-child { margin-top: 0; }
+    .body h1 { font-size: 15px; }
+    .body h2 { font-size: 14px; }
+    .body h3 { font-size: 13px; }
+    .body h4 { font-size: 12px; }
     .action-menu { position: relative; align-self: flex-start; }
     .action-menu-toggle { display: grid; place-items: center; min-width: 24px; padding: 0 4px; border: 0; background: transparent; color: var(--pi-muted); cursor: pointer; }
     .action-menu-toggle:hover { color: var(--pi-text); }

@@ -384,4 +384,29 @@ describe("pi-web-review-thread", () => {
 
     expect(onUpdate).not.toHaveBeenCalled();
   });
+
+  it("renders markdown in saved comment bodies", async () => {
+    const element = await mount({
+      comments: [comment({ id: "review-md", body: "This is **bold** and this is `code` and [link](http://example.com)" })],
+    });
+    const shadowRoot = root(element);
+    const body = shadowRoot.querySelector(".body");
+
+    expect(body?.innerHTML).toContain("<strong>bold</strong>");
+    expect(body?.innerHTML).toContain("<code>code</code>");
+    expect(body?.innerHTML).toContain('href="http://example.com"');
+  });
+
+  it("renders markdown list items and blockquotes in comments", async () => {
+    const element = await mount({
+      comments: [comment({ id: "review-list", body: "- Item 1\n- Item 2\n\n> A quote" })],
+    });
+    const shadowRoot = root(element);
+    const body = shadowRoot.querySelector(".body");
+
+    expect(body?.innerHTML).toContain("<li>Item 1</li>");
+    expect(body?.innerHTML).toContain("<li>Item 2</li>");
+    expect(body?.innerHTML).toContain("<blockquote>");
+    expect(body?.innerHTML).toContain("A quote");
+  });
 });
