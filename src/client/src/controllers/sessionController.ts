@@ -296,25 +296,29 @@ export class SessionController {
     }
   }
 
-  async send(text: string, streamingBehavior?: "steer" | "followUp", attachments?: PromptAttachment[], delivery: PromptAttachmentDelivery = "inline") {
+  async send(text: string, streamingBehavior?: "steer" | "followUp", attachments?: PromptAttachment[], delivery: PromptAttachmentDelivery = "inline", hasReviewContent = false): Promise<boolean> {
     const session = this.getState().selectedSession;
-    if (!session || session.archived === true) return;
+    if (!session || session.archived === true) return false;
 
     const trimmed = text.trim();
     const hasAttachments = attachments !== undefined && attachments.length > 0;
     if (isClientPendingStartSessionInfo(session)) {
-      if (!hasAttachments && trimmed.startsWith("/")) this.enqueuePendingSessionSend(session, { type: "command", text });
-      else if (!hasAttachments && isShellInput(text)) this.enqueuePendingSessionSend(session, { type: "shell", text });
+      if (!hasAttachments && !hasReviewContent && trimmed.startsWith("/")) this.enqueuePendingSessionSend(session, { type: "command", text });
+      else if (!hasAttachments && !hasReviewContent && isShellInput(text)) this.enqueuePendingSessionSend(session, { type: "shell", text });
       else this.enqueuePendingSessionSend(session, { type: "prompt", text, streamingBehavior, attachments, delivery });
-      return;
+      // Enqueuing reliably delivers the message once the session exists (it is
+      // flushed in order by `flushQueuedPendingSends`), which is the same trust
+      // level the composer already gives text/attachments in this branch — they
+      // are cleared immediately regardless of this return value.
+      return true;
     }
-    if (!hasAttachments && trimmed.startsWith("/")) return this.runCommand(text);
-    if (!hasAttachments && isShellInput(text)) return this.runShell(text);
+    if (!hasAttachments && !hasReviewContent && trimmed.startsWith("/")) { await this.runCommand(text); return true; }
+    if (!hasAttachments && !hasReviewContent && isShellInput(text)) { await this.runShell(text); return true; }
 
     // Capture the originating session/machine before any await so the request
     // and its sending indicator stay bound to the right session even if the
     // user navigates elsewhere mid-upload.
-    await this.deliverPromptToSession(session, text, streamingBehavior, attachments, delivery, selectedMachineId(this.getState()), { markSending: hasAttachments });
+    return await this.deliverPromptToSession(session, text, streamingBehavior, attachments, delivery, selectedMachineId(this.getState()), { markSending: hasAttachments });
   }
 
   private markSendingPrompt(sessionId: string, sending: boolean): void {
