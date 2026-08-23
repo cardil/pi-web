@@ -211,10 +211,12 @@ export class ReviewThread extends LitElement {
     .action-menu-panel button { display: block; width: 100%; border: 0; border-radius: 5px; background: transparent; color: var(--pi-text); padding: 5px 7px; text-align: left; cursor: pointer; }
     .action-menu-panel button:hover { background: var(--pi-selection-bg); }
     .action-menu-panel button.danger { color: var(--pi-danger); }
-    .editor { box-sizing: border-box; width: 100%; min-height: 54px; resize: vertical; border: 1px solid var(--pi-border-muted); border-radius: 6px; background: var(--pi-bg); color: var(--pi-text); padding: 6px 8px; font: inherit; }
+    .editor { box-sizing: border-box; width: 100%; min-height: 54px; resize: vertical; border: 1px solid var(--pi-border-muted); border-radius: 6px; background: var(--pi-bg); color: var(--pi-text); caret-color: var(--pi-accent); padding: 6px 8px; font: inherit; }
     .editor-actions { display: flex; justify-content: flex-end; gap: 6px; }
-    .editor-actions button { border: 1px solid var(--pi-border-muted); border-radius: 6px; background: var(--pi-surface); color: var(--pi-text); padding: 5px 10px; cursor: pointer; }
+    .editor-actions button { border: 1px solid var(--pi-border); border-radius: 6px; background: var(--pi-surface); color: var(--pi-text); padding: 6px 10px; font: inherit; cursor: pointer; }
+    .editor-actions button:hover { background: var(--pi-bg); }
     .editor-actions button.primary { border-color: var(--pi-accent); color: var(--pi-accent); }
+    .editor-actions button.primary:hover { background: color-mix(in srgb, var(--pi-accent) 8%, var(--pi-surface)); }
   `;
 }
 
