@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { formatAnchorLabel } from "../review/reviewCoordinates";
 import type { ReviewAnchor, ReviewComment } from "../review/reviewTypes";
 import { actionMenuPanelStyle } from "./actionMenu";
+import { createMobilePromptEnterMedia, readPromptEnterPreference, shouldSendPromptOnEnterShortcut } from "../promptEnterBehavior";
 
 /** An in-progress, not-yet-saved comment rendered alongside saved ones. */
 export interface ReviewThreadDraft {
@@ -30,6 +31,8 @@ export class ReviewThread extends LitElement {
   @state() private draftBody = "";
   @state() private openMenuCommentId: string | undefined;
   @state() private menuStyle = "";
+
+  private readonly mobilePromptEnterMedia = createMobilePromptEnterMedia();
 
   private readonly onDocumentClick = (event: MouseEvent) => {
     if (event.composedPath().includes(this)) return;
@@ -100,6 +103,7 @@ export class ReviewThread extends LitElement {
           rows="3"
           .value=${this.editingBody}
           @input=${(event: Event) => { if (event.target instanceof HTMLTextAreaElement) this.editingBody = event.target.value; }}
+          @keydown=${(event: KeyboardEvent) => { this.handleEditingKeydown(event); }}
         ></textarea>
         <div class="editor-actions">
           <button type="button" class="primary" ?disabled=${this.editingBody.trim() === ""} @click=${() => { this.saveEdit(comment.id); }}>Save</button>
@@ -119,6 +123,7 @@ export class ReviewThread extends LitElement {
           placeholder="Leave a comment…"
           .value=${this.draftBody}
           @input=${(event: Event) => { if (event.target instanceof HTMLTextAreaElement) this.draftBody = event.target.value; }}
+          @keydown=${(event: KeyboardEvent) => { this.handleDraftKeydown(event); }}
         ></textarea>
         <div class="editor-actions">
           <button type="button" class="primary" ?disabled=${this.draftBody.trim() === ""} @click=${() => { this.submitDraft(); }}>Comment</button>
@@ -159,6 +164,25 @@ export class ReviewThread extends LitElement {
 
   private cancelEdit(): void {
     this.editingCommentId = undefined;
+  }
+
+  private handleDraftKeydown(event: KeyboardEvent): void {
+    this.handleCommentEditorKeydown(event, this.draftBody, () => { this.submitDraft(); });
+  }
+
+  private handleEditingKeydown(event: KeyboardEvent): void {
+    const commentId = this.editingCommentId;
+    if (commentId === undefined) return;
+    this.handleCommentEditorKeydown(event, this.editingBody, () => { this.saveEdit(commentId); });
+  }
+
+  private handleCommentEditorKeydown(event: KeyboardEvent, body: string, onSubmit: () => void): void {
+    if (event.key !== "Enter" || event.defaultPrevented || event.isComposing) return;
+    const shouldSubmit = shouldSendPromptOnEnterShortcut(event.shiftKey, this.mobilePromptEnterMedia, readPromptEnterPreference());
+    if (shouldSubmit && body.trim() !== "") {
+      event.preventDefault();
+      onSubmit();
+    }
   }
 
   static override styles = css`

@@ -296,4 +296,92 @@ describe("pi-web-review-thread", () => {
     expect(onUpdate).toHaveBeenCalledWith("review-a", "First comment edited");
     expect(shadowRoot.textContent).toContain("Second comment");
   });
+
+  it("submits the draft on Enter keydown when the body is not empty", async () => {
+    const onSubmitDraft = vi.fn();
+    const element = await mount({ draft: draft(), onSubmitDraft });
+    const shadowRoot = root(element);
+
+    const textarea = textareaAt(shadowRoot);
+    typeInto(textarea, "Draft comment");
+    await element.updateComplete;
+
+    const enterEvent = new KeyboardEvent("keydown", { key: "Enter", bubbles: true });
+    textarea.dispatchEvent(enterEvent);
+    await element.updateComplete;
+
+    expect(onSubmitDraft).toHaveBeenCalledWith("Draft comment");
+  });
+
+  it("does not submit the draft on Enter keydown when the body is empty", async () => {
+    const onSubmitDraft = vi.fn();
+    const element = await mount({ draft: draft(), onSubmitDraft });
+    const shadowRoot = root(element);
+
+    const textarea = textareaAt(shadowRoot);
+    const enterEvent = new KeyboardEvent("keydown", { key: "Enter", bubbles: true });
+    textarea.dispatchEvent(enterEvent);
+    await element.updateComplete;
+
+    expect(onSubmitDraft).not.toHaveBeenCalled();
+  });
+
+  it("does not submit the draft on Enter keydown when the body is whitespace-only", async () => {
+    const onSubmitDraft = vi.fn();
+    const element = await mount({ draft: draft(), onSubmitDraft });
+    const shadowRoot = root(element);
+
+    const textarea = textareaAt(shadowRoot);
+    typeInto(textarea, "   \n  ");
+    await element.updateComplete;
+
+    const enterEvent = new KeyboardEvent("keydown", { key: "Enter", bubbles: true });
+    textarea.dispatchEvent(enterEvent);
+    await element.updateComplete;
+
+    expect(onSubmitDraft).not.toHaveBeenCalled();
+  });
+
+  it("saves the edited comment on Enter keydown when the body is not empty", async () => {
+    const onUpdate = vi.fn();
+    const element = await mount({ comments: [comment()], onUpdate });
+    const shadowRoot = root(element);
+
+    buttonWithText(shadowRoot, "⋯").click();
+    await element.updateComplete;
+    buttonWithText(shadowRoot, "Edit").click();
+    await element.updateComplete;
+
+    const textarea = textareaAt(shadowRoot);
+    typeInto(textarea, "Edited comment");
+    await element.updateComplete;
+
+    const enterEvent = new KeyboardEvent("keydown", { key: "Enter", bubbles: true });
+    textarea.dispatchEvent(enterEvent);
+    await element.updateComplete;
+
+    expect(onUpdate).toHaveBeenCalledWith(comment().id, "Edited comment");
+  });
+
+  it("does not save the edited comment on Enter keydown when the body is empty", async () => {
+    const onUpdate = vi.fn();
+    const element = await mount({ comments: [comment()], onUpdate });
+    const shadowRoot = root(element);
+
+    buttonWithText(shadowRoot, "⋯").click();
+    await element.updateComplete;
+    buttonWithText(shadowRoot, "Edit").click();
+    await element.updateComplete;
+
+    const textarea = textareaAt(shadowRoot);
+    textarea.value = "";
+    textarea.dispatchEvent(new Event("input"));
+    await element.updateComplete;
+
+    const enterEvent = new KeyboardEvent("keydown", { key: "Enter", bubbles: true });
+    textarea.dispatchEvent(enterEvent);
+    await element.updateComplete;
+
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
 });
