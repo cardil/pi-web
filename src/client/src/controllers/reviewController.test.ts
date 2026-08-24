@@ -116,7 +116,9 @@ describe("ReviewController authoring + queries", () => {
     const id = harness.controller.list()[0]?.id;
     if (id === undefined) throw new Error("expected a comment");
 
-    harness.controller.update(id, "revised note");
+    const comment = harness.controller.list()[0];
+    if (comment === undefined) throw new Error("expected a comment");
+    harness.controller.update(id, "revised note", comment.anchor);
     expect(harness.controller.list()[0]?.body).toBe("revised note");
 
     harness.controller.remove(id);
@@ -361,6 +363,40 @@ describe("ReviewController session lifecycle", () => {
     harness.controller.forgetSession("local", "session-1");
 
     expect(reviewCommentStorage.loadComments("local:session-1", harness.backing)).toHaveLength(0);
+  });
+
+  it("submitDraft saves comment with updated anchor when provided", () => {
+    const harness = createHarness();
+    commitAndFillDraft(harness, "test comment");
+    const draft = harness.controller.draft();
+    if (draft === undefined) throw new Error("expected draft");
+
+    const updatedAnchor = {
+      filePath: draft.anchor.filePath,
+      range: { side: "new" as const, start: 10, end: 15 },
+    };
+    harness.controller.submitDraft(updatedAnchor);
+
+    const comment = harness.controller.list()[0];
+    expect(comment?.anchor).toEqual(updatedAnchor);
+  });
+
+  it("update saves comment with updated anchor when provided", () => {
+    const harness = createHarness();
+    commitAndFillDraft(harness, "original");
+    harness.controller.submitDraft();
+    const id = harness.controller.list()[0]?.id;
+    if (id === undefined) throw new Error("expected a comment");
+
+    const updatedAnchor = {
+      filePath: "a.ts",
+      range: { side: "new" as const, start: 20, end: 25 },
+    };
+    harness.controller.update(id, "updated body", updatedAnchor);
+
+    const comment = harness.controller.list()[0];
+    expect(comment?.anchor).toEqual(updatedAnchor);
+    expect(comment?.body).toBe("updated body");
   });
 });
 

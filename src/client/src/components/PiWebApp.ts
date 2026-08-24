@@ -1474,9 +1474,9 @@ export class PiWebApp extends LitElement {
       commitSelection: (sourceHash) => { controller.commitSelection(sourceHash); },
       cancelSelection: () => { controller.cancelSelection(); },
       setDraftBody: (body) => { controller.setDraftBody(body); },
-      submitDraft: () => { controller.submitDraft(); },
+      submitDraft: (anchor) => { controller.submitDraft(anchor); },
       cancelDraft: () => { controller.cancelDraft(); },
-      updateComment: (id, body) => { controller.update(id, body); },
+      updateComment: (id, body, anchor) => { controller.update(id, body, anchor); },
       removeComment: (id) => { controller.remove(id); },
     };
   }

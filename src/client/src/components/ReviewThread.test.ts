@@ -129,7 +129,7 @@ describe("pi-web-review-thread", () => {
     buttonWithText(shadowRoot, "Save").click();
     await element.updateComplete;
 
-    expect(onUpdate).toHaveBeenCalledWith("review-1", "Edited body");
+    expect(onUpdate).toHaveBeenCalledWith("review-1", "Edited body", expect.any(Object));
     expect(shadowRoot.querySelectorAll("textarea")).toHaveLength(0);
     expect(shadowRoot.textContent).toContain("Original body");
   });
@@ -198,7 +198,11 @@ describe("pi-web-review-thread", () => {
     await element.updateComplete;
     buttonWithText(shadowRoot, "Comment").click();
 
-    expect(onSubmitDraft).toHaveBeenCalledWith("New comment text");
+    expect(onSubmitDraft).toHaveBeenCalledWith("New comment text", expect.objectContaining({
+      filePath: "src/app.ts",
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      range: expect.objectContaining({ side: "old", start: 8, end: 9 }),
+    }));
     expect(onCancelDraft).not.toHaveBeenCalled();
   });
 
@@ -293,7 +297,7 @@ describe("pi-web-review-thread", () => {
     buttonWithText(shadowRoot, "Save").click();
     await element.updateComplete;
 
-    expect(onUpdate).toHaveBeenCalledWith("review-a", "First comment edited");
+    expect(onUpdate).toHaveBeenCalledWith("review-a", "First comment edited", expect.any(Object));
     expect(shadowRoot.textContent).toContain("Second comment");
   });
 
@@ -310,7 +314,7 @@ describe("pi-web-review-thread", () => {
     textarea.dispatchEvent(enterEvent);
     await element.updateComplete;
 
-    expect(onSubmitDraft).toHaveBeenCalledWith("Draft comment");
+    expect(onSubmitDraft).toHaveBeenCalledWith("Draft comment", expect.any(Object));
   });
 
   it("does not submit the draft on Enter keydown when the body is empty", async () => {
@@ -360,7 +364,7 @@ describe("pi-web-review-thread", () => {
     textarea.dispatchEvent(enterEvent);
     await element.updateComplete;
 
-    expect(onUpdate).toHaveBeenCalledWith(comment().id, "Edited comment");
+    expect(onUpdate).toHaveBeenCalledWith(comment().id, "Edited comment", expect.any(Object));
   });
 
   it("does not save the edited comment on Enter keydown when the body is empty", async () => {
@@ -409,4 +413,69 @@ describe("pi-web-review-thread", () => {
     expect(body?.innerHTML).toContain("<blockquote>");
     expect(body?.innerHTML).toContain("A quote");
   });
+
+  it("renders single line without range notation", async () => {
+    const element = await mount({ draft: draft({ anchor: { filePath: "src/app.ts", range: { side: "new", start: 42, end: 42 } } }) });
+    const shadowRoot = root(element);
+
+    expect(shadowRoot.textContent).toContain("src/app.ts:42");
+    expect(shadowRoot.textContent).not.toContain("-");
+  });
+
+  it("sends updated anchor when Comment is clicked", async () => {
+    const onSubmitDraft = vi.fn();
+    const element = await mount({ draft: draft(), onSubmitDraft });
+    const shadowRoot = root(element);
+
+    const textarea = textareaAt(shadowRoot);
+    typeInto(textarea, "Updated comment");
+    await element.updateComplete;
+
+    buttonWithText(shadowRoot, "Comment").click();
+    await element.updateComplete;
+
+    expect(onSubmitDraft).toHaveBeenCalledWith("Updated comment", expect.objectContaining({
+      filePath: "src/app.ts",
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      range: expect.objectContaining({ start: 20, end: 20 }),
+    }));
+  });
+
+  it("submits draft with modified line range", async () => {
+    const onSubmitDraft = vi.fn();
+    const element = await mount({ draft: draft({ anchor: { filePath: "src/test.ts", range: { side: "new", start: 5, end: 10 } } }), onSubmitDraft });
+    const shadowRoot = root(element);
+
+    const textarea = textareaAt(shadowRoot);
+    typeInto(textarea, "Test comment with range change");
+    await element.updateComplete;
+
+    // Click line number to open edit form
+    const lineNumber = shadowRoot.querySelector(".line-number-clickable");
+    if (lineNumber instanceof HTMLElement) {
+      lineNumber.click();
+      await element.updateComplete;
+
+      // Change start line to 3
+      const inputs = shadowRoot.querySelectorAll("input[type=\"number\"]");
+      const startInput = inputs[0];
+      if (startInput instanceof HTMLInputElement) {
+        startInput.value = "3";
+        startInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      await element.updateComplete;
+    }
+
+    // Submit
+    buttonWithText(shadowRoot, "Comment").click();
+    await element.updateComplete;
+
+    expect(onSubmitDraft).toHaveBeenCalledWith("Test comment with range change", expect.objectContaining({
+      filePath: "src/test.ts",
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      range: expect.objectContaining({ side: "new", start: 3, end: 10 }),
+    }));
+  });
+
+
 });

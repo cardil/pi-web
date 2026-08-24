@@ -22,9 +22,9 @@ export interface ReviewThreadDraft {
 export class ReviewThread extends LitElement {
   @property({ attribute: false }) comments: readonly ReviewComment[] = [];
   @property({ attribute: false }) draft: ReviewThreadDraft | undefined;
-  @property({ attribute: false }) onSubmitDraft?: (body: string) => void;
+  @property({ attribute: false }) onSubmitDraft?: (body: string, anchor: ReviewAnchor) => void;
   @property({ attribute: false }) onCancelDraft?: () => void;
-  @property({ attribute: false }) onUpdate?: (id: string, body: string) => void;
+  @property({ attribute: false }) onUpdate?: (id: string, body: string, anchor: ReviewAnchor) => void;
   @property({ attribute: false }) onRemove?: (id: string) => void;
 
   /** Which saved comment (if any) is currently swapped into edit mode. */
@@ -33,6 +33,9 @@ export class ReviewThread extends LitElement {
   @state() private draftBody = "";
   @state() private openMenuCommentId: string | undefined;
   @state() private menuStyle = "";
+  @state() private lineRangeEditOpen = false;
+  @state() private lineEditStartLine: number | undefined;
+  @state() private lineEditEndLine: number | undefined;
 
   private readonly mobilePromptEnterMedia = createMobilePromptEnterMedia();
 
@@ -99,7 +102,7 @@ export class ReviewThread extends LitElement {
   private renderEditingComment(comment: ReviewComment): TemplateResult {
     return html`
       <div class="card">
-        <small class="caption">${formatAnchorLabel(comment.anchor)}</small>
+        <small class="caption">${this.renderEditingCaption(comment.anchor)}</small>
         <textarea
           class="editor"
           rows="3"
@@ -118,7 +121,7 @@ export class ReviewThread extends LitElement {
   private renderDraft(draft: ReviewThreadDraft): TemplateResult {
     return html`
       <div class="card draft">
-        <small class="caption">${formatAnchorLabel(draft.anchor)}</small>
+        <small class="caption">${this.renderDraftCaption(draft)}</small>
         <textarea
           class="editor"
           rows="3"
@@ -135,10 +138,69 @@ export class ReviewThread extends LitElement {
     `;
   }
 
+  private renderDraftCaption(draft: ReviewThreadDraft): TemplateResult {
+    const { filePath, range } = draft.anchor;
+    const { start, end, side } = range;
+    const sideLabel = side === "old" ? " (deleted)" : "";
+    const isSingleLine = start === end;
+    const startLine = this.lineEditStartLine ?? start;
+    const endLine = this.lineEditEndLine ?? end;
+    const maxLine = 9999;
+    const isInvalid = startLine < 1 || endLine < 1 || startLine > endLine || startLine > maxLine || endLine > maxLine;
+
+    if (this.lineRangeEditOpen) {
+      return html`${filePath}:<span class="line-range-edit"><input type="number" min="1" max="${String(maxLine)}" .value=${String(startLine)} class="line-input ${isInvalid ? "invalid" : ""}" @input=${(event: Event) => { if (event.target instanceof HTMLInputElement) { this.lineEditStartLine = parseInt(event.target.value, 10) || 1; } }} /> – <input type="number" min="1" max="${String(maxLine)}" .value=${String(endLine)} class="line-input ${isInvalid ? "invalid" : ""}" @input=${(event: Event) => { if (event.target instanceof HTMLInputElement) { this.lineEditEndLine = parseInt(event.target.value, 10) || 1; } }} />${sideLabel}</span>`;
+    }
+    const lineLabel = isSingleLine ? String(start) : `${String(start)}-${String(end)}`;
+    return html`${filePath}:<span class="line-range"><span class="line-number-clickable" @click=${() => { this.openDraftLineRangeEdit(); }}>${lineLabel}</span>${sideLabel}</span>`;
+  }
+
+  private openDraftLineRangeEdit(): void {
+    const { start, end } = this.draft?.anchor.range ?? { start: 1, end: 1 };
+    this.lineRangeEditOpen = true;
+    this.lineEditStartLine = start;
+    this.lineEditEndLine = end;
+  }
+
+  private renderEditingCaption(anchor: ReviewAnchor): TemplateResult {
+    const { filePath, range } = anchor;
+    const { start, end, side } = range;
+    const sideLabel = side === "old" ? " (deleted)" : "";
+    const isSingleLine = start === end;
+    const startLine = this.lineEditStartLine ?? start;
+    const endLine = this.lineEditEndLine ?? end;
+    const maxLine = 9999;
+
+    if (this.lineRangeEditOpen) {
+      return html`${filePath}:<span class="line-range-edit"><input type="number" min="1" max="${String(maxLine)}" .value=${String(startLine)} class="line-input" @input=${(event: Event) => { if (event.target instanceof HTMLInputElement) { this.lineEditStartLine = parseInt(event.target.value, 10) || 1; } }} /> – <input type="number" min="1" max="${String(maxLine)}" .value=${String(endLine)} class="line-input" @input=${(event: Event) => { if (event.target instanceof HTMLInputElement) { this.lineEditEndLine = parseInt(event.target.value, 10) || 1; } }} />${sideLabel}</span>`;
+    }
+    const lineLabel = isSingleLine ? String(start) : `${String(start)}-${String(end)}`;
+    return html`${filePath}:<span class="line-range"><span class="line-number-clickable" @click=${() => { this.openEditingLineRangeEdit(anchor); }}>${lineLabel}</span>${sideLabel}</span>`;
+  }
+
+  private openEditingLineRangeEdit(anchor: ReviewAnchor): void {
+    const { start, end } = anchor.range;
+    this.lineRangeEditOpen = true;
+    this.lineEditStartLine = start;
+    this.lineEditEndLine = end;
+  }
+
   /** No-ops for a blank/whitespace-only body -- an empty comment carries no signal and is not worth persisting. Mirrors the `?disabled` guard on the "Comment" button as a belt-and-suspenders check. */
   private submitDraft(): void {
     if (this.draftBody.trim() === "") return;
-    this.onSubmitDraft?.(this.draftBody);
+    if (!this.draft) return;
+    this.lineRangeEditOpen = false;
+    const startLine = this.lineEditStartLine ?? this.draft.anchor.range.start;
+    const endLine = this.lineEditEndLine ?? this.draft.anchor.range.end;
+    const updatedAnchor: ReviewAnchor = {
+      filePath: this.draft.anchor.filePath,
+      range: {
+        side: this.draft.anchor.range.side,
+        start: startLine,
+        end: endLine,
+      },
+    };
+    this.onSubmitDraft?.(this.draftBody, updatedAnchor);
   }
 
   private toggleMenu(commentId: string, target: EventTarget | null): void {
@@ -160,12 +222,26 @@ export class ReviewThread extends LitElement {
   private saveEdit(commentId: string): void {
     const body = this.editingBody;
     if (body.trim() === "") return;
+    const comment = this.comments.find((c) => c.id === commentId);
+    if (!comment) return;
     this.editingCommentId = undefined;
-    this.onUpdate?.(commentId, body);
+    this.lineRangeEditOpen = false;
+    const startLine = this.lineEditStartLine ?? comment.anchor.range.start;
+    const endLine = this.lineEditEndLine ?? comment.anchor.range.end;
+    const updatedAnchor: ReviewAnchor = {
+      filePath: comment.anchor.filePath,
+      range: {
+        side: comment.anchor.range.side,
+        start: startLine,
+        end: endLine,
+      },
+    };
+    this.onUpdate?.(commentId, body, updatedAnchor);
   }
 
   private cancelEdit(): void {
     this.editingCommentId = undefined;
+    this.lineRangeEditOpen = false;
   }
 
   private handleDraftKeydown(event: KeyboardEvent): void {
@@ -205,6 +281,10 @@ export class ReviewThread extends LitElement {
     .card.draft { background: var(--pi-selection-bg); }
     .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
     .caption { color: var(--pi-muted); font-size: 11px; overflow-wrap: anywhere; }
+    .line-range, .line-range-edit { display: inline-flex; align-items: center; gap: 4px; }
+    .line-number-clickable { color: var(--pi-accent); text-decoration: underline; cursor: pointer; }
+    .line-input { width: 40px; padding: 2px 4px; border: 1px solid var(--pi-border-muted); border-radius: 3px; background: var(--pi-bg); color: var(--pi-text); font: 11px system-ui, sans-serif; }
+    .line-input.invalid { border-color: var(--pi-danger); background: color-mix(in srgb, var(--pi-danger) 8%, var(--pi-bg)); }
     .body { margin: 0; overflow-wrap: anywhere; white-space: normal; line-height: 1.45; }
     .body p, .body ul, .body ol, .body pre, .body blockquote { margin: 0 0 8px; }
     .body :last-child { margin-bottom: 0; }

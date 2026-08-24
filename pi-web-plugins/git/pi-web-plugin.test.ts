@@ -394,13 +394,13 @@ describe("git tab review comments", () => {
     if (thread === undefined) throw new Error("Expected a mounted review thread");
     expect(thread.comments).toEqual([comment]);
 
-    thread.onUpdate?.("c1", "edited");
-    expect(updateComment).toHaveBeenCalledWith("c1", "edited");
+    thread.onUpdate?.("c1", "edited", comment.anchor);
+    expect(updateComment).toHaveBeenCalledWith("c1", "edited", comment.anchor);
     thread.onRemove?.("c1");
     expect(removeComment).toHaveBeenCalledWith("c1");
-    thread.onSubmitDraft?.("new body");
+    thread.onSubmitDraft?.("new body", comment.anchor);
     expect(setDraftBody).toHaveBeenCalledWith("new body");
-    expect(submitDraft).toHaveBeenCalledTimes(1);
+    expect(submitDraft).toHaveBeenCalledWith(comment.anchor);
     thread.onCancelDraft?.();
     expect(cancelDraft).toHaveBeenCalledTimes(1);
   });
@@ -531,9 +531,9 @@ describe("git tab review comments", () => {
 
 interface ReviewThreadTestElement extends HTMLElement {
   comments?: unknown;
-  onUpdate?: (id: string, body: string) => void;
+  onUpdate?: (id: string, body: string, anchor: unknown) => void;
   onRemove?: (id: string) => void;
-  onSubmitDraft?: (body: string) => void;
+  onSubmitDraft?: (body: string, anchor: unknown) => void;
   onCancelDraft?: () => void;
 }
 

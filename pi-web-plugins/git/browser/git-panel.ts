@@ -4,6 +4,7 @@ import type {
   PluginAction,
   PluginContributions,
   PluginRuntimeContext,
+  ReviewAnchor,
   SvgTemplateTag,
   Workspace,
   WorkspacePanelContext,
@@ -676,9 +677,9 @@ function renderReviewThreadRow(html: HtmlTemplateTag, context: WorkspacePanelCon
       class="git-review-thread"
       .comments=${comments}
       .draft=${draft}
-      .onSubmitDraft=${(body: string) => { context.review.setDraftBody(body); context.review.submitDraft(); context.host.requestRender(); }}
+      .onSubmitDraft=${(body: string, anchor: ReviewAnchor) => { context.review.setDraftBody(body); context.review.submitDraft(anchor); context.host.requestRender(); }}
       .onCancelDraft=${() => { context.review.cancelDraft(); context.host.requestRender(); }}
-      .onUpdate=${(id: string, body: string) => { context.review.updateComment(id, body); context.host.requestRender(); }}
+      .onUpdate=${(id: string, body: string, anchor: ReviewAnchor) => { context.review.updateComment(id, body, anchor); context.host.requestRender(); }}
       .onRemove=${(id: string) => { context.review.removeComment(id); context.host.requestRender(); }}
     ></pi-web-review-thread>
   `;

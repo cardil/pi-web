@@ -7,7 +7,7 @@ import {
 } from "../review/reviewCommentStorage";
 import { hashSource as defaultHashSource } from "../review/reviewHash";
 import { buildReviewMarkdown } from "../review/reviewMarkdown";
-import type { ReviewComment, ReviewLineRef, ReviewSide } from "../review/reviewTypes";
+import type { ReviewAnchor, ReviewComment, ReviewLineRef, ReviewSide } from "../review/reviewTypes";
 import { selectedMachineId, type GetState, type SetState } from "./types";
 
 interface ReviewCommentStorage {
@@ -184,13 +184,13 @@ export class ReviewController {
   }
 
   /** Creates the comment from the current draft and persists it. No-ops without an open draft. */
-  submitDraft(): void {
+  submitDraft(anchor?: ReviewAnchor): void {
     const draft = this.getState().reviewDraft;
     if (draft === undefined) return;
     const timestamp = this.now();
     const comment: ReviewComment = {
       id: this.idFactory(),
-      anchor: draft.anchor,
+      anchor: anchor ?? draft.anchor,
       body: draft.body,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -206,9 +206,9 @@ export class ReviewController {
     this.setState({ reviewDraft: undefined });
   }
 
-  update(id: string, body: string): void {
+  update(id: string, body: string, anchor: ReviewAnchor): void {
     const timestamp = this.now();
-    this.persistComments(this.getState().reviewComments.map((comment) => (comment.id === id ? { ...comment, body, updatedAt: timestamp } : comment)));
+    this.persistComments(this.getState().reviewComments.map((comment) => (comment.id === id ? { ...comment, body, anchor, updatedAt: timestamp } : comment)));
   }
 
   remove(id: string): void {

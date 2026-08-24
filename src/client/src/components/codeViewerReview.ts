@@ -188,9 +188,9 @@ class ReviewThreadWidget extends WidgetType {
     el.comments = this.comments;
     el.draft = this.draft ?? undefined;
     const refresh = () => { view.dispatch({ effects: reviewRefreshEffect.of(undefined) }); };
-    el.onSubmitDraft = (body) => { this.review.setDraftBody(body); this.review.submitDraft(); refresh(); };
+    el.onSubmitDraft = (body, anchor) => { this.review.setDraftBody(body); this.review.submitDraft(anchor); refresh(); };
     el.onCancelDraft = () => { this.review.cancelDraft(); refresh(); };
-    el.onUpdate = (id, body) => { this.review.updateComment(id, body); refresh(); };
+    el.onUpdate = (id, body, anchor) => { this.review.updateComment(id, body, anchor); refresh(); };
     el.onRemove = (id) => { this.review.removeComment(id); refresh(); };
     return el;
   }

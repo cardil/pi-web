@@ -223,11 +223,11 @@ export interface WorkspaceReview {
   commitSelection(sourceHash: string): void; // opens the draft at the current selection
   cancelSelection(): void;
   setDraftBody(body: string): void;
-  submitDraft(): void;
+  submitDraft(anchor?: ReviewAnchor): void;
   cancelDraft(): void;
 
   // --- existing comments ---
-  updateComment(id: string, body: string): void;
+  updateComment(id: string, body: string, anchor: ReviewAnchor): void;
   removeComment(id: string): void;
 }
 

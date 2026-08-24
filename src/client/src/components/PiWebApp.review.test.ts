@@ -51,7 +51,7 @@ describe("PiWebApp workspace panel context review adapter", () => {
     if (comment === undefined) throw new Error("Expected the submitted review comment to be present");
     expect(comment.body).toBe("looks good");
 
-    authoring.review.updateComment(comment.id, "updated body");
+    authoring.review.updateComment(comment.id, "updated body", comment.anchor);
     const [updated] = authoring.review.commentsForLine("src/a.ts", { side: "new", line: 4 });
     expect(updated?.body).toBe("updated body");
 
