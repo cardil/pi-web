@@ -967,8 +967,10 @@ export interface SessionModel {
 
 /**
  * One row of a session machine's full available-model catalog: the model plus
- * its membership in pi's enabled-models scope (`enabledModels` setting). Model
- * scope is selection UX for picking/cycling, never an authorization boundary.
+ * its membership in pi's effective enabled-models scope (`enabledModels`
+ * setting). Model scope is selection UX for picking/cycling, never an
+ * authorization boundary. Workspace overrides mark rows non-editable because
+ * PI WEB's picker writes only the global setting.
  */
 export interface SessionModelCatalogEntry {
   provider: string;
@@ -977,17 +979,25 @@ export interface SessionModelCatalogEntry {
   contextWindow?: number;
   reasoning?: unknown;
   enabled: boolean;
+  /** False when a workspace `.pi/settings.json` override controls membership and the global picker is read-only. */
+  editable?: boolean;
+  /** Stable zero-based position in the machine's unscoped catalog. Optional for compatibility with older servers. */
+  catalogIndex?: number;
 }
 
 /**
  * The session machine's full available model catalog with per-model enabled
  * state. Enabled models come first — in the same set and order as the
  * session's pickable ("Enabled") model list — followed by the remaining
- * models in catalog order.
+ * models in catalog order. Each row's `catalogIndex` preserves its natural
+ * unscoped position independently of this enabled-first response order.
  */
 export interface SessionModelCatalogResponse {
   models: SessionModelCatalogEntry[];
 }
+
+/** Canonical model-scope presets exposed by the model picker's bulk toggle. */
+export type SessionModelScopeMode = "all" | "current";
 
 // Domain type is owned by pi and re-exported from the shared thinking-levels
 // module. Wire/data fields below intentionally use `string` so an unknown level
@@ -1303,9 +1313,16 @@ type SessionUiEventBody =
   | { type: "session.created"; session: SessionInfo }
   | { type: "pi.event"; eventType: string };
 
+/** Global invalidation for the daemon-owned enabled-model scope. */
+export interface ModelScopeChangedEvent {
+  type: "models.changed";
+  revision: number;
+}
+
 export type GlobalSessionEvent =
   | Extract<SessionUiEventBody, { type: "status.update" | "activity.update" | "session.name" | "session.created" }>
   | SessionNotificationSummaryEvent
   | SessionUnreadEvent
-  | SessionStartupProgressEvent;
+  | SessionStartupProgressEvent
+  | ModelScopeChangedEvent;
 export type RealtimeEvent = GlobalSessionEvent | TerminalUiEvent | MachineStatusUiEvent;
