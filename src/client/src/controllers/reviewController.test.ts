@@ -70,6 +70,8 @@ function createHarness(statePatch: Partial<AppState> = {}, deps: ReviewControlle
     notify,
     backing,
     get state() { return state; },
+    /** Simulates `sessionController.selectSession` updating `selectedSession` -- production always does this alongside `adoptSession`, whereas this harness otherwise pins it to a fixed session. */
+    setSelectedSessionId(id: string) { state = { ...state, selectedSession: { ...session, id } }; },
   };
 }
 
@@ -344,6 +346,42 @@ describe("ReviewController session lifecycle", () => {
     expect(harness.controller.list()[0]?.anchor.filePath).toBe("x.ts");
     expect(harness.state.reviewSelection).toBeUndefined();
     expect(harness.state.reviewDraft).toBeUndefined();
+  });
+
+  it("comments are session-scoped: switching sessions swaps the active view without dropping either session's storage", () => {
+    const harness = createHarness();
+    commitAndFillDraft(harness, "session-1 comment");
+    harness.controller.submitDraft();
+    expect(harness.controller.list()).toHaveLength(1);
+
+    harness.setSelectedSessionId("session-2");
+    harness.controller.adoptSession("local", "session-2");
+    expect(harness.controller.list()).toHaveLength(0);
+
+    commitAndFillDraft(harness, "session-2 comment", "hash-b");
+    harness.controller.submitDraft();
+    expect(harness.controller.list()).toHaveLength(1);
+    expect(harness.controller.list()[0]?.body).toBe("session-2 comment");
+
+    harness.setSelectedSessionId("session-1");
+    harness.controller.adoptSession("local", "session-1");
+    expect(harness.controller.list()).toHaveLength(1);
+    expect(harness.controller.list()[0]?.body).toBe("session-1 comment");
+  });
+
+  it("clearActiveSession empties the in-memory view without touching persisted storage", () => {
+    const harness = createHarness();
+    commitAndFillDraft(harness, "note");
+    harness.controller.submitDraft();
+    expect(harness.controller.list()).toHaveLength(1);
+
+    harness.controller.clearActiveSession();
+    expect(harness.controller.list()).toHaveLength(0);
+
+    expect(reviewCommentStorage.loadComments("local:session-1", harness.backing)).toHaveLength(1);
+
+    harness.controller.adoptSession("local", "session-1");
+    expect(harness.controller.list()).toHaveLength(1);
   });
 
   it("renameSession moves the store from the old key to the new key", () => {

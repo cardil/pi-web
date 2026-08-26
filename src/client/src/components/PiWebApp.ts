@@ -278,6 +278,7 @@ export class PiWebApp extends LitElement {
   protected override willUpdate(): void {
     this.toggleAttribute("pwa-display-mode", this.appShell.isPwaDisplayMode);
     this.syncSessionWarningVisibility();
+    this.syncReviewSession();
   }
 
   protected override updated(): void {
@@ -286,6 +287,21 @@ export class PiWebApp extends LitElement {
     // deduplicates acknowledgements for the observed completion order.
     this.committedChatIdentity = selectedChatIdentity(this.state);
     this.syncSelectedSessionReadState();
+  }
+
+  /** Tracks the last session `syncReviewSession` adopted, so review comments/drafts follow session switches instead of leaking across them. */
+  private reviewSessionKey: string | undefined;
+
+  private syncReviewSession(): void {
+    const session = this.state.selectedSession;
+    const key = session === undefined ? undefined : machineSessionKey(selectedMachineId(this.state), session.id);
+    if (key === this.reviewSessionKey) return;
+    this.reviewSessionKey = key;
+    if (session === undefined) {
+      this.reviewController.clearActiveSession();
+    } else {
+      this.reviewController.adoptSession(selectedMachineId(this.state), session.id);
+    }
   }
 
   private syncSessionWarningVisibility(): void {

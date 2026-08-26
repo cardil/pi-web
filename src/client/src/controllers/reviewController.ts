@@ -253,6 +253,12 @@ export class ReviewController {
     this.setState({ reviewComments: comments, reviewDraft: undefined, reviewSelection: undefined });
   }
 
+  /** No session selected: reset in-memory review state only -- storage is untouched, so a reselected session's comments reload via `adoptSession`. */
+  clearActiveSession(): void {
+    this.draftSourceHash = undefined;
+    this.setState({ reviewComments: [], reviewDraft: undefined, reviewSelection: undefined });
+  }
+
   /**
    * Moves the store from one session key to another. Mirrors
    * `moveDraft`/`moveStagedAttachments`, which `sessionController` already

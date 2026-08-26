@@ -106,8 +106,7 @@ export class WorkspaceFilesPanel extends LitElement {
     return html`
       <button class=${selected ? "row selected" : "row"} style=${`--depth:${String(depth)}`} @click=${() => { this.selectTreeEntry(context, entry); }}>
         <span>${entry.type === "directory" ? (hasChildren ? "▾" : "▸") : "·"}</span>
-        <span>${entry.name}</span>
-        ${reviewCount > 0 ? html`<span class="badge" title=${`${String(reviewCount)} review ${reviewCount === 1 ? "comment" : "comments"}`}>${reviewCount}</span>` : null}
+        <span>${entry.name}${reviewCount > 0 ? html`<span class="badge" title=${`${String(reviewCount)} review ${reviewCount === 1 ? "comment" : "comments"}`}>${reviewCount}</span>` : null}</span>
       </button>
       ${hasChildren ? children.map((child) => this.renderTreeEntry(context, child, depth + 1)) : null}
     `;
