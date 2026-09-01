@@ -80,7 +80,7 @@ type SendPromptFn = (
   streamingBehavior?: "steer" | "followUp",
   attachments?: unknown,
   delivery?: unknown,
-  folder?: string,
+  folderOrReview?: string | boolean,
   hasReviewContent?: boolean,
 ) => Promise<boolean>;
 

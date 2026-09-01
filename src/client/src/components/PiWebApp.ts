@@ -2127,10 +2127,12 @@ export class PiWebApp extends LitElement {
   }
 
   // Returns whether the send genuinely went out or was queued for later delivery.
-  private async sendPrompt(text: string, streamingBehavior?: "steer" | "followUp", attachments?: import("../api").PromptAttachment[], delivery?: import("../../../shared/apiTypes").PromptAttachmentDelivery, folder?: string, hasReviewContent = false): Promise<boolean> {
+  private async sendPrompt(text: string, streamingBehavior?: "steer" | "followUp", attachments?: import("../api").PromptAttachment[], delivery?: import("../../../shared/apiTypes").PromptAttachmentDelivery, folderOrReview?: string | boolean, hasReviewContent = false): Promise<boolean> {
+    const folder = typeof folderOrReview === "string" ? folderOrReview : undefined;
+    const hasReview = typeof folderOrReview === "boolean" ? folderOrReview : hasReviewContent;
     const hasAttachments = attachments !== undefined && attachments.length > 0;
-    if (!hasAttachments && !hasReviewContent && streamingBehavior === undefined && this.auth.handleSlashCommand(text)) return true;
-    return await this.sessions.send(text, streamingBehavior, attachments, delivery, folder, hasReviewContent);
+    if (!hasAttachments && !hasReview && streamingBehavior === undefined && this.auth.handleSlashCommand(text)) return true;
+    return await this.sessions.send(text, streamingBehavior, attachments, delivery, folder, hasReview);
   }
 
   // Stable handler identities for child components. Inlined arrow closures
