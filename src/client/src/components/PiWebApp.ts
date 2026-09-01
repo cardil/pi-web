@@ -1,6 +1,6 @@
 import { LitElement, html } from "lit";
 import { customElement, query, state } from "lit/decorators.js";
-import { configApi, effectiveWorkspaceUploadFolder, sessionsApi, terminalsApi, workspacesApi, workspaceEffectiveUploadFolder, type AskUserSubmission, type CommandOption, type ExtensionDialogAnswer, type Machine, type MachineHealth, type PiWebConfigValues, type PiWebShortcutConfig, type Project, type SessionCleanupExecuteResponse, type SessionCleanupPreviewResponse, type SessionCleanupRequest, type SessionInfo, type SessionModel, type SessionModelCatalogEntry, type SessionModelScopeMode, type SessionTreeForkResult, type SessionTreeNavigateResult, type SessionTreeSummaryChoice, type TerminalCommandRun, type TerminalUiEvent, type Workspace } from "../api";
+import { configApi, effectiveWorkspaceAttachmentsFolder, effectiveWorkspaceUploadFolder, sessionsApi, terminalsApi, workspacesApi, workspaceEffectiveAttachmentsFolder, workspaceEffectiveUploadFolder, type AskUserSubmission, type CommandOption, type ExtensionDialogAnswer, type Machine, type MachineHealth, type PiWebConfigValues, type PiWebShortcutConfig, type Project, type SessionCleanupExecuteResponse, type SessionCleanupPreviewResponse, type SessionCleanupRequest, type SessionInfo, type SessionModel, type SessionModelCatalogEntry, type SessionModelScopeMode, type SessionTreeForkResult, type SessionTreeNavigateResult, type SessionTreeSummaryChoice, type TerminalCommandRun, type TerminalUiEvent, type Workspace } from "../api";
 import type { AppAction } from "../actions";
 import { initialAppState, type AppState, type ModelDialogOrigin } from "../appState";
 import { isSessionActive } from "../../../shared/activity";
@@ -86,6 +86,7 @@ import { appStyles } from "./shared";
 
 
 const PI_WEB_STATUS_REFRESH_MS = 15 * 60 * 1000;
+const SELECTED_SESSION_REFRESH_MS = 5_000;
 const PI_WEB_STATUS_DEFER_MS = 750;
 const REMOTE_ROUTE_RESTORE_RETRY_DELAYS_MS = [1_000, 3_000, 8_000, 15_000, 30_000] as const;
 const GLOBAL_SHORTCUT_LISTENER_OPTIONS = { capture: true } as const;
@@ -224,6 +225,7 @@ export class PiWebApp extends LitElement {
   private readonly systemLightThemeMedia = typeof window !== "undefined" && "matchMedia" in window ? window.matchMedia("(prefers-color-scheme: light)") : undefined;
   private terminalAutoStartWorkspaceId: string | undefined;
   private piWebStatusTimer: number | undefined;
+  private selectedSessionRefreshTimer: number | undefined;
   private piWebStatusDeferredTimer: number | undefined;
   private workspaceDeletionPollTimer: number | undefined;
   private refreshingWorkspaceDeletionRuns = false;
@@ -250,6 +252,7 @@ export class PiWebApp extends LitElement {
   @state() private settingsSection: SettingsSection | undefined = readSettingsSection();
   @state() private shortcutConfig: PiWebShortcutConfig = {};
   @state() private workspaceUploadDefaultFolder = effectiveWorkspaceUploadFolder(undefined);
+  @state() private workspaceAttachmentsDefaultFolder = effectiveWorkspaceAttachmentsFolder(undefined);
   private sessionWarningVisibility = initialSessionWarningVisibilityState();
   private readonly onPopState = () => void this.withChatScrollTransition(async () => {
     this.restoreSettingsRoute();
@@ -371,6 +374,7 @@ export class PiWebApp extends LitElement {
     this.connectRealtime();
     this.syncSessionUnreadMachines();
     this.piWebStatusTimer = window.setInterval(() => { this.schedulePiWebStatusRefresh(); }, PI_WEB_STATUS_REFRESH_MS);
+    this.scheduleSelectedSessionRefresh();
     void this.loadClientConfig();
     void this.ensureGatewayPluginsLoaded();
     void this.loadProjectsAndRestoreRoute().finally(() => { this.schedulePiWebStatusRefresh(); });
@@ -394,6 +398,8 @@ export class PiWebApp extends LitElement {
     this.closeMachineActivitySockets();
     if (this.piWebStatusTimer !== undefined) window.clearInterval(this.piWebStatusTimer);
     this.piWebStatusTimer = undefined;
+    if (this.selectedSessionRefreshTimer !== undefined) window.clearTimeout(this.selectedSessionRefreshTimer);
+    this.selectedSessionRefreshTimer = undefined;
     this.clearScheduledPiWebStatusRefresh();
     if (this.workspaceDeletionPollTimer !== undefined) window.clearInterval(this.workspaceDeletionPollTimer);
     this.workspaceDeletionPollTimer = undefined;
@@ -455,6 +461,23 @@ export class PiWebApp extends LitElement {
     ]);
   }
 
+  /** Poll idle external sessions without overlapping work or waking hidden tabs. */
+  private scheduleSelectedSessionRefresh(): void {
+    if (this.selectedSessionRefreshTimer !== undefined) window.clearTimeout(this.selectedSessionRefreshTimer);
+    this.selectedSessionRefreshTimer = window.setTimeout(() => {
+      this.selectedSessionRefreshTimer = undefined;
+      void this.refreshSelectedTranscript().finally(() => { this.scheduleSelectedSessionRefresh(); });
+    }, SELECTED_SESSION_REFRESH_MS);
+  }
+
+  private async refreshSelectedTranscript(): Promise<void> {
+    const session = this.state.selectedSession;
+    const status = this.state.status;
+    if (session === undefined || session.archived === true || document.visibilityState !== "visible") return;
+    if (status?.isStreaming === true || status?.isCompacting === true || status?.isBashRunning === true || (status?.pendingMessageCount ?? 0) > 0) return;
+    await this.sessions.refreshSelectedSession(session.id, { silent: true });
+  }
+
   private schedulePiWebStatusRefresh(delayMs = PI_WEB_STATUS_DEFER_MS): void {
     this.clearScheduledPiWebStatusRefresh();
     this.piWebStatusDeferredTimer = window.setTimeout(() => {
@@ -503,6 +526,7 @@ export class PiWebApp extends LitElement {
   private applyClientConfig(config: PiWebConfigValues): void {
     this.shortcutConfig = config.shortcuts ?? {};
     this.workspaceUploadDefaultFolder = effectiveWorkspaceUploadFolder(config);
+    this.workspaceAttachmentsDefaultFolder = effectiveWorkspaceAttachmentsFolder(config);
   }
 
   private async refreshAppData(): Promise<void> {
@@ -2102,22 +2126,18 @@ export class PiWebApp extends LitElement {
     if (value !== "") await this.sessions.setThinkingLevel(value);
   }
 
-  // Returns whether the send genuinely went out (or was queued for reliable
-  // later delivery), so `PromptEditor` can gate review-comment clearing on
-  // confirmed success. The `handleSlashCommand` short-circuit is not a
-  // "review send" scenario (guarded out by `hasReviewContent`), and the slash
-  // command it recognized did execute, so `true` is the correct signal there.
-  private async sendPrompt(text: string, streamingBehavior?: "steer" | "followUp", attachments?: import("../api").PromptAttachment[], delivery?: import("../../../shared/apiTypes").PromptAttachmentDelivery, hasReviewContent = false): Promise<boolean> {
+  // Returns whether the send genuinely went out or was queued for later delivery.
+  private async sendPrompt(text: string, streamingBehavior?: "steer" | "followUp", attachments?: import("../api").PromptAttachment[], delivery?: import("../../../shared/apiTypes").PromptAttachmentDelivery, folder?: string, hasReviewContent = false): Promise<boolean> {
     const hasAttachments = attachments !== undefined && attachments.length > 0;
     if (!hasAttachments && !hasReviewContent && streamingBehavior === undefined && this.auth.handleSlashCommand(text)) return true;
-    return await this.sessions.send(text, streamingBehavior, attachments, delivery, hasReviewContent);
+    return await this.sessions.send(text, streamingBehavior, attachments, delivery, folder, hasReviewContent);
   }
 
   // Stable handler identities for child components. Inlined arrow closures
   // would be a fresh reference on every render, forcing Lit to re-commit the
   // bindings each time the app re-renders; bound class fields keep them constant.
-  private readonly handleSendPrompt = async (text: string, streamingBehavior?: "steer" | "followUp", attachments?: import("../api").PromptAttachment[], delivery?: import("../../../shared/apiTypes").PromptAttachmentDelivery, hasReviewContent = false): Promise<boolean> => {
-    return await this.sendPrompt(text, streamingBehavior, attachments, delivery, hasReviewContent);
+  private readonly handleSendPrompt = async (text: string, streamingBehavior?: "steer" | "followUp", attachments?: import("../api").PromptAttachment[], delivery?: import("../../../shared/apiTypes").PromptAttachmentDelivery, folder?: string, hasReviewContent = false): Promise<boolean> => {
+    return await this.sendPrompt(text, streamingBehavior, attachments, delivery, folder, hasReviewContent);
   };
 
   private readonly handleReviewRemove = (id: string): void => {
@@ -2311,7 +2331,7 @@ export class PiWebApp extends LitElement {
           <div class="mobile-navigation-panel">${this.appShell.isMobileNavigationLayout ? this.renderNavigationPanel() : null}</div>
           ${state.selectedSession ? html`
             ${this.renderChatView(state, state.selectedSession)}
-            <prompt-editor .sessionId=${state.selectedSession.id} .cwd=${state.selectedWorkspace?.path} .machineId=${selectedMachineId(state)} .projectId=${state.selectedWorkspace?.projectId} .workspaceId=${state.selectedWorkspace?.id} .disabled=${state.selectedSession.archived === true} .canSteer=${state.status?.isStreaming === true} .isCompacting=${state.status?.isCompacting === true} .canStop=${state.status?.isStreaming === true || state.status?.isBashRunning === true || state.status?.isCompacting === true || (state.status?.pendingMessageCount ?? 0) > 0} .status=${state.status} .availableThinkingLevels=${state.availableThinkingLevels} .sending=${state.sendingPrompts[state.selectedSession.id] === true} .reviewComments=${state.reviewComments} .reviewSendLocked=${state.reviewSendLocked} .onSend=${this.handleSendPrompt} .onStop=${this.handleStopActiveWork} .onSelectModel=${this.handleSelectModel} .onSelectThinking=${this.handleSelectThinking} .onReviewRemove=${this.handleReviewRemove} .onReviewBeginSend=${this.handleReviewBeginSend} .onReviewCompleteSend=${this.handleReviewCompleteSend} .onReviewAbortSend=${this.handleReviewAbortSend}></prompt-editor>
+            <prompt-editor .sessionId=${state.selectedSession.id} .cwd=${state.selectedWorkspace?.path} .machineId=${selectedMachineId(state)} .projectId=${state.selectedWorkspace?.projectId} .workspaceId=${state.selectedWorkspace?.id} .attachmentsFolder=${workspaceEffectiveAttachmentsFolder(state.selectedWorkspace?.effectiveConfig, this.workspaceAttachmentsDefaultFolder)} .disabled=${state.selectedSession.archived === true} .canSteer=${state.status?.isStreaming === true} .isCompacting=${state.status?.isCompacting === true} .canStop=${state.status?.isStreaming === true || state.status?.isBashRunning === true || state.status?.isCompacting === true || (state.status?.pendingMessageCount ?? 0) > 0} .status=${state.status} .availableThinkingLevels=${state.availableThinkingLevels} .sending=${state.sendingPrompts[state.selectedSession.id] === true} .reviewComments=${state.reviewComments} .reviewSendLocked=${state.reviewSendLocked} .onSend=${this.handleSendPrompt} .onStop=${this.handleStopActiveWork} .onSelectModel=${this.handleSelectModel} .onSelectThinking=${this.handleSelectThinking} .onReviewRemove=${this.handleReviewRemove} .onReviewBeginSend=${this.handleReviewBeginSend} .onReviewCompleteSend=${this.handleReviewCompleteSend} .onReviewAbortSend=${this.handleReviewAbortSend}></prompt-editor>
             ${this.renderStatusBar(state)}
             ${state.commandDialog !== undefined ? html`<command-picker .title=${state.commandDialog.title} .options=${state.commandDialog.options} .onPick=${(value: string) => this.sessions.respondToCommand(state.commandDialog?.requestId ?? "", value)} .onCancel=${() => { this.sessions.cancelCommand(); }}></command-picker>` : null}
             ${state.modelDialog !== undefined ? html`<model-picker title=${state.modelDialog.title} .options=${state.modelDialog.options} .catalog=${state.modelDialog.catalog} .selectedValue=${state.modelDialog.selectedValue} .onPick=${(value: string) => { void this.pickModel(value); }} .onToggleEnabled=${this.handleToggleModelEnabled} .onSetScope=${this.handleSetModelScope} .onCancel=${() => { this.setState({ modelDialog: undefined }); }}></model-picker>` : null}

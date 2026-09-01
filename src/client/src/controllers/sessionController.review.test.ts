@@ -86,7 +86,7 @@ describe("SessionController hasReviewContent bypass", () => {
       { api, socket: new FakeSocket() },
     );
 
-    const result = await controller.send("/foo", undefined, undefined, "inline", true);
+    const result = await controller.send("/foo", undefined, undefined, "inline", undefined, true);
 
     expect(runCommandCalled).toBe(false);
     expect(promptText).toBe("/foo");
@@ -110,7 +110,7 @@ describe("SessionController hasReviewContent bypass", () => {
       { api, socket: new FakeSocket() },
     );
 
-    const result = await controller.send("!pwd", undefined, undefined, "inline", true);
+    const result = await controller.send("!pwd", undefined, undefined, "inline", undefined, true);
 
     expect(shellCalled).toBe(false);
     expect(promptText).toBe("!pwd");
@@ -139,7 +139,7 @@ describe("SessionController hasReviewContent bypass", () => {
     );
 
     const start = controller.startSession();
-    await controller.send("/help", undefined, undefined, "inline", true);
+    await controller.send("/help", undefined, undefined, "inline", undefined, true);
     startRequest.resolve(started);
     await start;
 

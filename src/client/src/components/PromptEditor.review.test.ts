@@ -147,6 +147,7 @@ describe("PromptEditor review-bearing send flow", () => {
       undefined,
       undefined,
       undefined,
+      undefined,
       true,
     );
     expect(onReviewCompleteSend).toHaveBeenCalledWith(["review-1"]);
@@ -169,6 +170,7 @@ describe("PromptEditor review-bearing send flow", () => {
 
     expect(onSend).toHaveBeenCalledWith(
       "Code review comments:\n\n- src/a.ts:1: fix this",
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -244,6 +246,6 @@ describe("PromptEditor fast path with zero review comments", () => {
     expect(onReviewBeginSend).not.toHaveBeenCalled();
     expect(onReviewCompleteSend).not.toHaveBeenCalled();
     expect(onReviewAbortSend).not.toHaveBeenCalled();
-    expect(onSend).toHaveBeenCalledWith("plain message", undefined, undefined, undefined);
+    expect(onSend).toHaveBeenCalledWith("plain message", undefined, undefined, undefined, undefined);
   });
 });

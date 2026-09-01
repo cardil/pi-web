@@ -80,6 +80,7 @@ type SendPromptFn = (
   streamingBehavior?: "steer" | "followUp",
   attachments?: unknown,
   delivery?: unknown,
+  folder?: string,
   hasReviewContent?: boolean,
 ) => Promise<boolean>;
 
@@ -137,7 +138,7 @@ describe("PiWebApp.sendPrompt hasReviewContent threading", () => {
     const result = await callSendPrompt(app, "/login", undefined, undefined, undefined, true);
 
     expect(handleSlashCommand).not.toHaveBeenCalled();
-    expect(send).toHaveBeenCalledWith("/login", undefined, undefined, undefined, true);
+    expect(send).toHaveBeenCalledWith("/login", undefined, undefined, undefined, undefined, true);
     expect(result).toBe(true);
   });
 

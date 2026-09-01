@@ -5,7 +5,7 @@ import { drawSelection, EditorView, keymap, placeholder } from "@codemirror/view
 import { defaultHighlightStyle, indentOnInput, indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { LitElement, html, type PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
-import { api, type FileSuggestion, type PromptAttachment, type SessionModel, type SessionStatus, type SlashCommand } from "../api";
+import { api, DEFAULT_WORKSPACE_ATTACHMENTS_FOLDER, type FileSuggestion, type PromptAttachment, type SessionModel, type SessionStatus, type SlashCommand } from "../api";
 import type { PromptAttachmentDelivery } from "../../../shared/apiTypes";
 import { capturePromptAttachments, effectivePromptAttachmentDelivery, isInlinePromptAttachment, promptAttachmentsCanUseInlineDelivery } from "../promptAttachmentCapture";
 import { inputModeForDraft, inputModesEqual, type InputMode } from "../inputModes";
@@ -32,12 +32,18 @@ export class PromptEditor extends LitElement {
   @property() machineId = "local";
   @property() projectId?: string;
   @property() workspaceId?: string;
+  /**
+   * Workspace-effective folder for the "save to folder" attachment delivery.
+   * Shown in the delivery label and sent explicitly with the save request, so
+   * the save destination is always the folder the label advertised.
+   */
+  @property() attachmentsFolder = DEFAULT_WORKSPACE_ATTACHMENTS_FOLDER;
   @property({ type: Boolean }) canSteer = false;
   @property({ type: Boolean }) isCompacting = false;
   @property({ type: Boolean }) canStop = false;
   @property({ attribute: false }) status?: SessionStatus;
   @property({ type: Boolean }) sending = false;
-  @property({ attribute: false }) onSend?: (text: string, streamingBehavior?: "steer" | "followUp", attachments?: PromptAttachment[], delivery?: PromptAttachmentDelivery, hasReviewContent?: boolean) => boolean | Promise<boolean>;
+  @property({ attribute: false }) onSend?: (text: string, streamingBehavior?: "steer" | "followUp", attachments?: PromptAttachment[], delivery?: PromptAttachmentDelivery, folder?: string, hasReviewContent?: boolean) => unknown;
   @property({ attribute: false }) onStop?: () => void;
   @property({ attribute: false }) onSelectModel?: () => void;
   @property({ attribute: false }) onSelectThinking?: () => void;
@@ -202,7 +208,7 @@ export class PromptEditor extends LitElement {
           <label class="attachment-delivery" title=${canUseInlineDelivery ? "How attachments are delivered to the agent" : "General files are saved and mentioned from the workspace"}>
             <select .value=${delivery} @change=${(event: Event) => { this.changeDelivery(event); }}>
               <option value="inline" ?disabled=${!canUseInlineDelivery}>Attach to message${canUseInlineDelivery ? "" : " (images only)"}</option>
-              <option value="folder">Save to .pi-web/attachments</option>
+              <option value="folder">${attachmentFolderDeliveryLabel(this.attachmentsFolder)}</option>
             </select>
           </label>
         ` : null}
@@ -506,28 +512,18 @@ export class PromptEditor extends LitElement {
     const behavior = this.canSteer || this.isCompacting ? streamingBehavior : undefined;
     const attachments = pending.length > 0 ? this.currentAttachments() : undefined;
     const delivery = this.effectiveAttachmentDelivery();
-
+    const folder = attachments !== undefined && delivery === "folder" ? this.attachmentsFolder : undefined;
     if (reviewComments.length === 0) {
-      // Unchanged fast path: no review comments in play, preserve exact prior
-      // fire-and-forget behavior to avoid any behavior change for the common
-      // case. Sending is owned by the controller (it drives the chat activity
-      // dock and, for folder mode, orchestrates the upload + reference
-      // rewrite).
       this.resetComposer();
-      void this.onSend?.(text, behavior, attachments, attachments === undefined ? undefined : delivery);
+      void this.onSend?.(text, behavior, attachments, attachments === undefined ? undefined : delivery, folder);
       return;
     }
 
-    // Review-bearing send: gate comment clearing on confirmed success.
-    // `beginSend()` snapshots the ids/markdown and locks authoring;
-    // `resetComposer()` only clears the typed draft/attachments, never the
-    // review comments themselves -- those are only removed by
-    // `onReviewCompleteSend` once the parent confirms delivery.
     const snapshot = this.onReviewBeginSend?.() ?? { ids: [], markdown: "" };
     const body = [text, snapshot.markdown].filter((part) => part !== "").join("\n\n");
     this.resetComposer();
     try {
-      const result = await this.onSend?.(body, behavior, attachments, attachments === undefined ? undefined : delivery, true);
+      const result = await this.onSend?.(body, behavior, attachments, attachments === undefined ? undefined : delivery, folder, true);
       if (result === false) this.onReviewAbortSend?.();
       else this.onReviewCompleteSend?.(snapshot.ids);
     } catch {
@@ -608,6 +604,10 @@ const REVIEW_CHIP_SNIPPET_LENGTH = 40;
 function reviewChipSnippet(body: string): string {
   const trimmed = body.trim();
   return trimmed.length > REVIEW_CHIP_SNIPPET_LENGTH ? `${trimmed.slice(0, REVIEW_CHIP_SNIPPET_LENGTH)}\u2026` : trimmed;
+}
+
+export function attachmentFolderDeliveryLabel(folder: string): string {
+  return `Save to ${folder}`;
 }
 
 function fileExtensionLabel(name: string): string {

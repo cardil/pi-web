@@ -224,9 +224,9 @@ export interface WorkspaceReview {
     commitSelection(sourceHash: string): void;
     cancelSelection(): void;
     setDraftBody(body: string): void;
-    submitDraft(): void;
+    submitDraft(anchor?: ReviewAnchor): void;
     cancelDraft(): void;
-    updateComment(id: string, body: string): void;
+    updateComment(id: string, body: string, anchor: ReviewAnchor): void;
     removeComment(id: string): void;
 }
 export interface WorkspacePanelContext extends WorkspaceContext {
